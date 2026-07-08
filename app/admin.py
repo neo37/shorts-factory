@@ -6,7 +6,7 @@ from flask_admin import Admin, AdminIndexView, BaseView, expose
 from flask_admin.contrib.sqla import ModelView
 
 from config import Config
-from .models import db, User, Bot, Preset, Job, ApiKey
+from .models import db, User, Bot, Preset, Job, ApiKey, Project
 
 
 # ---------- HTTP basic auth gate ----------
@@ -70,11 +70,17 @@ class ApiKeyView(SecureModelView):
 
 
 class JobView(SecureModelView):
-    column_list = ("id", "bot_id", "telegram_id", "design_style", "status", "created_at")
-    column_filters = ("status", "design_style", "bot_id")
+    column_list = ("id", "bot_id", "telegram_id", "design_style", "media_source", "status", "created_at")
+    column_filters = ("status", "design_style", "media_source", "bot_id")
     column_searchable_list = ("telegram_id", "prompt")
     can_create = False
     can_edit = True
+
+
+class ProjectView(SecureModelView):
+    column_list = ("id", "user_id", "name", "media_source", "created_at")
+    column_filters = ("media_source",)
+    form_columns = ("user_id", "name", "media_source")
 
 
 class QueueView(AuthMixin, BaseView):
@@ -121,6 +127,7 @@ def init_admin(app):
                   template_mode="bootstrap4")
     admin.add_view(BotView(Bot, db.session, name="Боты"))
     admin.add_view(UserView(User, db.session, name="Пользователи"))
+    admin.add_view(ProjectView(Project, db.session, name="Проекты"))
     admin.add_view(JobView(Job, db.session, name="Задачи"))
     admin.add_view(QueueView(name="Очередь", endpoint="queue"))
     admin.add_view(PresetView(Preset, db.session, name="Пресеты"))

@@ -16,7 +16,29 @@ def review_kb(job_id: int) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def main_menu_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def main_menu_kb(project_name: str = None, media_source: str = None) -> InlineKeyboardMarkup:
+    src_label = {"user": "свои медиа", "stock": "стоки", "mix": "микс"}.get(media_source or "mix", "микс")
+    rows = [
+        [InlineKeyboardButton(text=f"🗂 Проект: {project_name or 'Мой проект'}",
+                              callback_data="proj:menu")],
+        [InlineKeyboardButton(text=f"🖼 Источник медиа: {src_label}", callback_data="src:menu")],
         [InlineKeyboardButton(text="💳 Связаться / Пополнить баланс", url=Config.TOPUP_CONTACT_URL)],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def media_source_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📤 Мои фото/видео", callback_data="src:user")],
+        [InlineKeyboardButton(text="🌐 Внешние стоки", callback_data="src:stock")],
+        [InlineKeyboardButton(text="🔀 Микс (свои + стоки)", callback_data="src:mix")],
     ])
+
+
+def projects_kb(projects, active_id) -> InlineKeyboardMarkup:
+    rows = []
+    for p in projects:
+        mark = "✅ " if p.id == active_id else ""
+        rows.append([InlineKeyboardButton(text=f"{mark}{p.name}", callback_data=f"proj:use:{p.id}")])
+    rows.append([InlineKeyboardButton(text="➕ Новый проект", callback_data="proj:new")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

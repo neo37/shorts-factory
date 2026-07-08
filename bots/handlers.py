@@ -1,5 +1,9 @@
 """Telegram user flow (aiogram v3). One shared Router across all bots; the design_style
 is resolved from the DB by the receiving bot's token.
+
+Prompts may be text OR voice. Voice messages are transcribed via the ASR queue (nemotron),
+so all heavy CPU work (render + ASR) is serialized on the single-thread worker.
+Media (photos/videos) is grouped per Project; the media source (user/stock/mix) is per Project.
 """
 import asyncio
 import json
@@ -12,11 +16,11 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from config import Config
-from app.models import db, Job
+from app.models import db, Job, Project
 from app import billing
 from app.presets import example_paths
 from . import texts
-from .keyboards import main_menu_kb, review_kb
+from .keyboards import main_menu_kb, media_source_kb, projects_kb, review_kb
 
 log = logging.getLogger("videobot.handlers")
 router = Router()
@@ -24,19 +28,9 @@ router = Router()
 _flask_app = None
 _token_map = {}                 # token -> {"bot_id", "design_style"}
 _awaiting_correction = {}       # (token, tg_id) -> job_id
-_media_basket = {}              # (token, tg_id) -> [staged file paths]
+_awaiting_project_name = set()  # {(token, tg_id)}
 
 MAX_MEDIA_BYTES = texts.MAX_MEDIA_MB * 1024 * 1024
-
-
-async def _stage_media(bot: Bot, file_id: str, suffix: str, tg_id: int) -> str:
-    """Download a Telegram file into the per-user staging dir; return local path."""
-    dest_dir = Config.DATA_DIR / "media" / str(tg_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{uuid.uuid4().hex}{suffix}"
-    tg_file = await bot.get_file(file_id)          # raises if > 20 MB (Telegram side)
-    await bot.download_file(tg_file.file_path, destination=str(dest))
-    return str(dest)
 
 
 def init(flask_app, token_map):
@@ -55,15 +49,86 @@ async def _enqueue(task, *args):
     return await loop.run_in_executor(None, lambda: task.delay(*args))
 
 
+async def _stage_file(bot: Bot, file_id: str, suffix: str, tg_id: int, kind: str) -> str:
+    """Download a Telegram file into a per-user staging dir; return local path.
+    Raises if the file exceeds Telegram's getFile limit (~20 MB)."""
+    dest_dir = Config.DATA_DIR / kind / str(tg_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{uuid.uuid4().hex}{suffix}"
+    tg_file = await bot.get_file(file_id)
+    await bot.download_file(tg_file.file_path, destination=str(dest))
+    return str(dest)
+
+
+# ---------------- start / menu ----------------
 @router.message(CommandStart())
 async def on_start(message: Message, bot: Bot):
     with ctx():
         user = billing.get_or_create_user(
             message.from_user.id, message.from_user.username, message.from_user.first_name)
-        credits = user.credits
-    await message.answer(texts.with_footer(texts.intro(credits)), reply_markup=main_menu_kb())
+        proj = billing.get_active_project(user)
+        credits, pname, psrc = user.credits, proj.name, proj.media_source
+    await message.answer(texts.with_footer(texts.intro(credits)),
+                         reply_markup=main_menu_kb(pname, psrc))
 
 
+# ---------------- project menu ----------------
+@router.callback_query(F.data == "proj:menu")
+async def on_proj_menu(cb: CallbackQuery, bot: Bot):
+    with ctx():
+        user = billing.get_or_create_user(cb.from_user.id)
+        proj = billing.get_active_project(user)
+        projects = Project.query.filter_by(user_id=user.id).all()
+        kb = projects_kb(projects, proj.id)
+        txt = texts.projects_menu(proj.name)
+    await cb.message.answer(texts.with_footer(txt), reply_markup=kb)
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("proj:use:"))
+async def on_proj_use(cb: CallbackQuery, bot: Bot):
+    pid = int(cb.data.rsplit(":", 1)[1])
+    with ctx():
+        user = billing.get_or_create_user(cb.from_user.id)
+        proj = billing.set_active_project(user, pid)
+        name, src = (proj.name, proj.media_source) if proj else ("Мой проект", "mix")
+    await cb.message.answer(texts.with_footer(f"✅ Активный проект: <b>{name}</b>"),
+                            reply_markup=main_menu_kb(name, src))
+    await cb.answer()
+
+
+@router.callback_query(F.data == "proj:new")
+async def on_proj_new(cb: CallbackQuery, bot: Bot):
+    _awaiting_project_name.add((bot.token, cb.from_user.id))
+    await cb.message.answer(texts.with_footer(texts.ask_project_name()))
+    await cb.answer()
+
+
+# ---------------- media source ----------------
+@router.callback_query(F.data == "src:menu")
+async def on_src_menu(cb: CallbackQuery, bot: Bot):
+    with ctx():
+        user = billing.get_or_create_user(cb.from_user.id)
+        proj = billing.get_active_project(user)
+        cur = proj.media_source
+    await cb.message.answer(texts.with_footer(texts.source_menu(cur)), reply_markup=media_source_kb())
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("src:") & ~F.data.in_({"src:menu"}))
+async def on_src_set(cb: CallbackQuery, bot: Bot):
+    src = cb.data.split(":", 1)[1]
+    with ctx():
+        user = billing.get_or_create_user(cb.from_user.id)
+        proj = billing.get_active_project(user)
+        billing.set_media_source(proj, src)
+        name = proj.name
+    await cb.message.answer(texts.with_footer(texts.source_set(src)),
+                            reply_markup=main_menu_kb(name, src))
+    await cb.answer()
+
+
+# ---------------- review buttons ----------------
 @router.callback_query(F.data.startswith("amend:"))
 async def on_amend(cb: CallbackQuery, bot: Bot):
     job_id = int(cb.data.split(":", 1)[1])
@@ -87,7 +152,6 @@ async def on_decline(cb: CallbackQuery, bot: Bot):
 
 @router.callback_query(F.data.startswith("examples:"))
 async def on_examples(cb: CallbackQuery, bot: Bot):
-    from config import Config
     style = _token_map.get(bot.token, {}).get("design_style", "businesspad-dark")
     sent = 0
     for rel in example_paths(style):
@@ -109,8 +173,8 @@ async def on_approve(cb: CallbackQuery, bot: Bot):
     job_id = int(cb.data.split(":", 1)[1])
     with ctx():
         job = db.session.get(Job, job_id)
-        if not job or job.status not in ("awaiting_user",):
-            await cb.answer("Уже обработано", show_alert=False)
+        if not job or job.status != "awaiting_user":
+            await cb.answer("Уже обработано")
             return
         job.status = "queued"
         db.session.commit()
@@ -120,22 +184,31 @@ async def on_approve(cb: CallbackQuery, bot: Bot):
     await cb.answer()
 
 
+# ---------------- media uploads (grouped per project) ----------------
+async def _add_media(bot: Bot, message: Message, file_id: str, suffix: str, size: int):
+    if size and size > MAX_MEDIA_BYTES:
+        await message.answer(texts.with_footer(texts.media_too_big(size / 1024 / 1024)))
+        return
+    try:
+        path = await _stage_file(bot, file_id, suffix, message.from_user.id, "media")
+    except Exception as e:  # noqa: BLE001
+        log.warning("media download failed: %s", e)
+        await message.answer(texts.with_footer(texts.media_too_big((size or 0) / 1024 / 1024)))
+        return
+    with ctx():
+        user = billing.get_or_create_user(message.from_user.id)
+        proj = billing.get_active_project(user)
+        count = billing.add_project_media(proj, path)
+    await message.answer(texts.with_footer(texts.media_added(count)))
+
+
 @router.message(F.photo)
 async def on_photo(message: Message, bot: Bot):
-    photo = message.photo[-1]  # largest size; Telegram-compressed, always small
-    try:
-        path = await _stage_media(bot, photo.file_id, ".jpg", message.from_user.id)
-    except Exception as e:  # noqa: BLE001
-        log.warning("photo download failed: %s", e)
-        await message.answer(texts.with_footer(texts.media_too_big(
-            (photo.file_size or 0) / 1024 / 1024)))
-        return
-    basket = _media_basket.setdefault((bot.token, message.from_user.id), [])
-    basket.append(path)
-    await message.answer(texts.with_footer(texts.media_added(len(basket))))
+    photo = message.photo[-1]
+    await _add_media(bot, message, photo.file_id, ".jpg", photo.file_size or 0)
 
 
-@router.message(F.video | F.document | F.animation)
+@router.message(F.video | F.animation | F.document)
 async def on_video(message: Message, bot: Bot):
     obj = message.video or message.animation or message.document
     mime = getattr(obj, "mime_type", "") or ""
@@ -144,32 +217,91 @@ async def on_video(message: Message, bot: Bot):
     if not (is_video or is_image):
         await message.answer(texts.with_footer(texts.media_unsupported()))
         return
+    await _add_media(bot, message, obj.file_id, ".mp4" if is_video else ".jpg", obj.file_size or 0)
+
+
+# ---------------- voice prompt (ASR via queue) ----------------
+@router.message(F.voice | F.audio)
+async def on_voice(message: Message, bot: Bot):
+    from app.tasks import process_voice_prompt
+    obj = message.voice or message.audio
     size = obj.file_size or 0
     if size > MAX_MEDIA_BYTES:
         await message.answer(texts.with_footer(texts.media_too_big(size / 1024 / 1024)))
         return
-    suffix = ".mp4" if is_video else ".jpg"
+    key = (bot.token, message.from_user.id)
+    binfo = _token_map.get(bot.token, {})
     try:
-        path = await _stage_media(bot, obj.file_id, suffix, message.from_user.id)
+        voice_path = await _stage_file(bot, obj.file_id, ".ogg", message.from_user.id, "voice")
     except Exception as e:  # noqa: BLE001
-        log.warning("media download failed: %s", e)
-        await message.answer(texts.with_footer(texts.media_too_big(size / 1024 / 1024)))
+        await message.answer(texts.with_footer(texts.error(f"не удалось скачать голосовое: {e}")))
         return
-    basket = _media_basket.setdefault((bot.token, message.from_user.id), [])
-    basket.append(path)
-    await message.answer(texts.with_footer(texts.media_added(len(basket))))
+
+    with ctx():
+        user = billing.get_or_create_user(
+            message.from_user.id, message.from_user.username, message.from_user.first_name)
+        proj = billing.get_active_project(user)
+
+        # voice as a correction to an existing job — no charge
+        if key in _awaiting_correction:
+            job = db.session.get(Job, _awaiting_correction[key])
+            if job:
+                job.voice_path = voice_path
+                job.status = "queued"
+                db.session.commit()
+                jid = job.id
+                _awaiting_correction.pop(key, None)
+                await message.answer(texts.with_footer(texts.voice_received()))
+                await _enqueue(process_voice_prompt, jid)
+                return
+
+        # new voice prompt — charge 1 credit
+        if not billing.has_credit(user):
+            await message.answer(texts.with_footer(texts.no_credits()),
+                                 reply_markup=main_menu_kb(proj.name, proj.media_source))
+            return
+        billing.charge(user)
+        media = billing.project_media(proj)
+        job = Job(
+            bot_id=binfo.get("bot_id"), user_id=user.id, project_id=proj.id,
+            telegram_id=user.telegram_id, chat_id=message.chat.id,
+            design_style=binfo.get("design_style", "businesspad-dark"),
+            media_source=proj.media_source,
+            media_json=json.dumps(media) if media else None,
+            voice_path=voice_path,
+            watermark=billing.watermark_for(user), status="queued",
+        )
+        db.session.add(job)
+        db.session.commit()
+        jid = job.id
+    await message.answer(texts.with_footer(texts.voice_received()))
+    await _enqueue(process_voice_prompt, jid)
 
 
+# ---------------- text (project name / correction / new prompt) ----------------
 @router.message(F.text & ~F.text.startswith("/"))
 async def on_text(message: Message, bot: Bot):
     from app.tasks import process_prompt
     key = (bot.token, message.from_user.id)
     binfo = _token_map.get(bot.token, {})
+
+    # awaiting a new project name
+    if key in _awaiting_project_name:
+        _awaiting_project_name.discard(key)
+        with ctx():
+            user = billing.get_or_create_user(message.from_user.id)
+            proj = billing.create_project(user, message.text)
+            name, src = proj.name, proj.media_source
+        await message.answer(texts.with_footer(texts.project_created(name)),
+                             reply_markup=main_menu_kb(name, src))
+        return
+
     with ctx():
         user = billing.get_or_create_user(
             message.from_user.id, message.from_user.username, message.from_user.first_name)
+        proj = billing.get_active_project(user)
 
-        # correction path — no charge
+        # correction to an existing job — no charge
         if key in _awaiting_correction:
             job = db.session.get(Job, _awaiting_correction[key])
             if job:
@@ -182,22 +314,21 @@ async def on_text(message: Message, bot: Bot):
                 await _enqueue(process_prompt, jid)
                 return
 
-        # new prompt path — charge 1 credit
+        # new prompt — charge 1 credit
         if not billing.has_credit(user):
-            await message.answer(texts.with_footer(texts.no_credits()), reply_markup=main_menu_kb())
+            await message.answer(texts.with_footer(texts.no_credits()),
+                                 reply_markup=main_menu_kb(proj.name, proj.media_source))
             return
         billing.charge(user)
-        media = _media_basket.pop(key, [])
+        media = billing.project_media(proj)
         job = Job(
-            bot_id=binfo.get("bot_id"),
-            user_id=user.id,
-            telegram_id=user.telegram_id,
-            chat_id=message.chat.id,
+            bot_id=binfo.get("bot_id"), user_id=user.id, project_id=proj.id,
+            telegram_id=user.telegram_id, chat_id=message.chat.id,
             design_style=binfo.get("design_style", "businesspad-dark"),
-            prompt=message.text,
+            media_source=proj.media_source,
             media_json=json.dumps(media) if media else None,
-            watermark=billing.watermark_for(user),
-            status="queued",
+            prompt=message.text,
+            watermark=billing.watermark_for(user), status="queued",
         )
         db.session.add(job)
         db.session.commit()

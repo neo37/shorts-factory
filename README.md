@@ -19,8 +19,12 @@ projects can reuse the same LLM and TTS.
 - **Prompt → Short.** Free-form prompt → structured storyboard, scene captions and a narration draft.
 - **Refinement loop.** Inline buttons: `✅ Approve · ✏️ Amend · ❌ Decline · 🎬 Examples · 💳 Top-up`.
   Amendments are free; a credit is charged only on the first prompt.
+- **Text or voice prompts.** Send a text prompt or a **voice message** — voice is transcribed
+  (NVIDIA nemotron ASR) and used as the prompt.
 - **Media upload.** Users attach **photos & videos** (≤ 20 MB — Telegram Bot API `getFile` limit);
-  media becomes scene backgrounds. Media source can be **user / external stock / mix** and grouped per **project**.
+  media becomes scene backgrounds. Media source can be **user / external stock / mix**, grouped per **project**.
+- **Single-thread queue.** All heavy CPU work — **rendering and speech recognition** — is serialized
+  on one Celery worker (`concurrency=1`) so they never compete for the CPU.
 - **Multi-bot.** Add many Telegram tokens; each bot is bound to one `design_style`.
 - **Billing (credits).** New users get 100 credits; 1 video = 1 credit. `500 ₽ = 5 videos` (manual top-up).
 - **Non-erasable footer.** Every message and rendered video carries `https://videos.ai3d.art`.
@@ -28,7 +32,8 @@ projects can reuse the same LLM and TTS.
 - **Admin panel** (Flask-Admin): bots, users/billing, presets, jobs and a **Celery queue manager**
   (cancel one task / purge the whole queue).
 - **OpenAI-compatible API** with per-key auth: `POST /v1/chat/completions`, `POST /v1/audio/speech`
-  (male/female voices, and the special stress `бизнес-пáд`), `GET /v1/models`.
+  (male/female voices, and the special stress `бизнес-пáд`), `POST /v1/audio/transcriptions`
+  (nemotron ASR, routed through the queue), `GET /v1/models`.
 
 ## 🏗 Architecture
 

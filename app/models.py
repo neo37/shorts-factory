@@ -20,6 +20,7 @@ class User(db.Model):
     credits = db.Column(db.Integer, default=0, nullable=False)
     # is_paid removes the demo watermark; the videos.ai3d.art footer is ALWAYS kept.
     is_paid = db.Column(db.Boolean, default=False, nullable=False)
+    active_project_id = db.Column(db.Integer)   # currently selected Project
     created_at = db.Column(db.DateTime, default=_now)
 
     def __repr__(self):
@@ -55,18 +56,38 @@ class Preset(db.Model):
         return f"<Preset {self.slug}>"
 
 
+class Project(db.Model):
+    """A user workspace: groups uploaded media and jobs. Holds the media-source choice."""
+    __tablename__ = "projects"
+    MEDIA_SOURCES = ("user", "stock", "mix")  # own media / external stock / mix
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
+    name = db.Column(db.String(128), default="Мой проект")
+    media_source = db.Column(db.String(16), default="mix")
+    media_json = db.Column(db.Text)            # JSON list of media staged for this project
+    created_at = db.Column(db.DateTime, default=_now)
+
+    def __repr__(self):
+        return f"<Project {self.name} src={self.media_source}>"
+
+
 class Job(db.Model):
     __tablename__ = "jobs"
-    STATUS = ("queued", "processing", "awaiting_user", "rendering", "done", "error", "cancelled")
+    STATUS = ("queued", "transcribing", "processing", "awaiting_user",
+              "rendering", "done", "error", "cancelled")
 
     id = db.Column(db.Integer, primary_key=True)
     celery_id = db.Column(db.String(64), index=True)
     bot_id = db.Column(db.Integer, db.ForeignKey("bots.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"))
     telegram_id = db.Column(db.BigInteger, index=True)
     chat_id = db.Column(db.BigInteger)
 
     design_style = db.Column(db.String(64))
+    media_source = db.Column(db.String(16), default="mix")
+    voice_path = db.Column(db.String(256))     # staged voice message awaiting transcription
     prompt = db.Column(db.Text)                # latest effective prompt (prompt + corrections)
     corrections = db.Column(db.Text)           # accumulated correction notes
     storyboard_json = db.Column(db.Text)       # structured storyboard from LLM

@@ -78,6 +78,32 @@ def audio_speech():
         return jsonify({"error": {"message": f"tts error: {e}", "type": "tts"}}), 502
 
 
+@api_bp.post("/v1/audio/transcriptions")
+def audio_transcriptions():
+    """OpenAI-compatible STT. Heavy work runs on the single-thread Celery queue (never inline)."""
+    if not _auth_ok():
+        return _unauth()
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": {"message": "'file' required (multipart)", "type": "invalid_request"}}), 400
+    import tempfile
+    from pathlib import Path
+    suffix = Path(f.filename or "audio.ogg").suffix or ".ogg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        path = tmp.name
+    f.save(path)
+    try:
+        from .tasks import transcribe_audio
+        res = transcribe_audio.delay(path)
+        out = res.get(timeout=Config.ASR_TIMEOUT + 30)  # block on the queue result
+        return jsonify(out)
+    except Exception as e:  # noqa: BLE001
+        log.exception("transcription failed")
+        return jsonify({"error": {"message": f"asr error: {e}", "type": "asr"}}), 502
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
 @api_bp.get("/v1/models")
 def models():
     if not _auth_ok():

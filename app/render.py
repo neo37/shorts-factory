@@ -203,9 +203,10 @@ def render_job(job, storyboard, gender="male"):
         (hf / "hyperframes.json").write_text(json.dumps(
             {"paths": {"blocks": "compositions", "assets": "assets"}}))
 
-    # copy user-uploaded media into the render assets, keep scene-order
+    # copy user-uploaded media into the render assets, keep scene-order.
+    # media_source == "stock" → ignore user media (visuals come from stock/generation).
     media_rel = []
-    if job.media_json:
+    if job.media_json and (job.media_source or "mix") != "stock":
         um = hf / "assets" / "user_media"
         um.mkdir(parents=True, exist_ok=True)
         for i, src in enumerate(json.loads(job.media_json)):

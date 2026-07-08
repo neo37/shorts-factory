@@ -65,6 +65,15 @@ docker run -d --name kokoro -p 8880:8880 ghcr.io/remsky/kokoro-fastapi:latest
 
 **or OpenAI fallback:** set `OPENAI_API_KEY` in `.env`.
 
+## 3b. ASR (voice-message prompts — nemotron)
+
+Voice prompts are transcribed by **NVIDIA nemotron-3.5-asr-streaming-0.6b**
+(https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b) served behind an
+OpenAI-compatible `/v1/audio/transcriptions` endpoint. Point `ASR_BASE_URL` / `ASR_MODEL`
+at your ASR server. Transcription runs as a **Celery task on the same single-thread queue**
+as rendering — so speech recognition and video render never fight for CPU. If the ASR server
+is unreachable and `OPENAI_API_KEY` is set, it falls back to Whisper.
+
 ## 4. Platform install
 
 ```bash

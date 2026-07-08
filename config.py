@@ -58,6 +58,12 @@ class Config:
     # Fallback to OpenAI TTS if configured (reads OPENAI_API_KEY or OPEN_AI_KEY)
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_KEY", "")
 
+    # --- ASR (speech-to-text for voice-message prompts) ---
+    # NVIDIA nemotron-3.5-asr-streaming-0.6b served behind an OpenAI-compatible endpoint.
+    ASR_BASE_URL = os.getenv("ASR_BASE_URL", "http://localhost:8890/v1")
+    ASR_MODEL = os.getenv("ASR_MODEL", "nvidia/nemotron-3.5-asr-streaming-0.6b")
+    ASR_TIMEOUT = int(os.getenv("ASR_TIMEOUT", "120"))
+
     # --- OpenMontage rendering ---
     OPENMONTAGE_DIR = Path(os.getenv("OPENMONTAGE_DIR", BASE_DIR.parent))
     RENDER_QUALITY = os.getenv("RENDER_QUALITY", "high")
