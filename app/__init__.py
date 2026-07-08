@@ -1,7 +1,7 @@
 """Flask application factory."""
 import logging
 
-from flask import Flask, redirect, jsonify
+from flask import Flask, jsonify
 
 from config import Config
 from .models import db
@@ -26,15 +26,14 @@ def create_app():
     from .uploads import uploads_bp
     app.register_blueprint(uploads_bp)
 
+    from .site import site_bp
+    app.register_blueprint(site_bp)
+
     from .admin import init_admin
     init_admin(app)
 
     with app.app_context():
         db.create_all()
-
-    @app.get("/")
-    def root():
-        return redirect("/admin/")
 
     @app.get("/status")
     def status():

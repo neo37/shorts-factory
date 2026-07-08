@@ -136,6 +136,20 @@ class UploadToken(db.Model):
         return _now() <= exp
 
 
+class ApiRequest(db.Model):
+    """A lead from the landing 'request API keys' form."""
+    __tablename__ = "api_requests"
+    id = db.Column(db.Integer, primary_key=True)
+    contact = db.Column(db.String(256), nullable=False)   # required
+    items_json = db.Column(db.Text)                       # selected services/models
+    note = db.Column(db.Text)
+    handled = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=_now)
+
+    def __repr__(self):
+        return f"<ApiRequest {self.contact}>"
+
+
 class ApiKey(db.Model):
     """External API key for OpenAI-compatible /v1 endpoints."""
     __tablename__ = "api_keys"

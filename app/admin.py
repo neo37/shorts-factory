@@ -6,7 +6,7 @@ from flask_admin import Admin, AdminIndexView, BaseView, expose
 from flask_admin.contrib.sqla import ModelView
 
 from config import Config
-from .models import db, User, Bot, Preset, Job, ApiKey, Project
+from .models import db, User, Bot, Preset, Job, ApiKey, Project, ApiRequest
 
 
 # ---------- HTTP basic auth gate ----------
@@ -69,6 +69,13 @@ class ApiKeyView(SecureModelView):
     can_edit = True
 
 
+class ApiRequestView(SecureModelView):
+    column_list = ("id", "contact", "items_json", "handled", "created_at")
+    column_editable_list = ("handled",)
+    column_default_sort = ("created_at", True)
+    can_create = False
+
+
 class JobView(SecureModelView):
     column_list = ("id", "bot_id", "telegram_id", "design_style", "media_source", "status", "created_at")
     column_filters = ("status", "design_style", "media_source", "bot_id")
@@ -123,8 +130,8 @@ class QueueView(AuthMixin, BaseView):
 
 
 def init_admin(app):
-    admin = Admin(app, name="VideoBot Admin", index_view=SecureIndex(),
-                  template_mode="bootstrap4")
+    admin = Admin(app, name="VideoBot Admin", index_view=SecureIndex(url="/admin2"),
+                  url="/admin2", template_mode="bootstrap4")
     admin.add_view(BotView(Bot, db.session, name="Боты"))
     admin.add_view(UserView(User, db.session, name="Пользователи"))
     admin.add_view(ProjectView(Project, db.session, name="Проекты"))
@@ -132,4 +139,5 @@ def init_admin(app):
     admin.add_view(QueueView(name="Очередь", endpoint="queue"))
     admin.add_view(PresetView(Preset, db.session, name="Пресеты"))
     admin.add_view(ApiKeyView(ApiKey, db.session, name="API-ключи"))
+    admin.add_view(ApiRequestView(ApiRequest, db.session, name="Заявки на API"))
     return admin
