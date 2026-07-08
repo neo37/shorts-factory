@@ -60,12 +60,12 @@ def media_added(count: int) -> str:
     )
 
 
-def media_too_big(size_mb: float) -> str:
-    return (
-        f"⚠️ Файл {size_mb:.1f} МБ — больше лимита Telegram для ботов ({MAX_MEDIA_MB} МБ).\n"
-        "Пришлите файл поменьше (можно сжать), либо загрузку крупных файлов "
-        "подключим через self-hosted Bot API (до 2 ГБ)."
-    )
+def media_too_big(size_mb: float, upload_url: str = None) -> str:
+    base = (f"⚠️ Файл {size_mb:.1f} МБ — больше лимита Telegram для ботов ({MAX_MEDIA_MB} МБ).")
+    if upload_url:
+        return (base + "\n\n📤 Загрузите его через веб-форму (статус виден там же):\n"
+                f"{upload_url}\n\nПосле загрузки вернитесь в бот и отправьте промт.")
+    return base + "\nПришлите файл поменьше или сожмите его."
 
 
 def media_unsupported() -> str:

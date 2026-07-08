@@ -15,10 +15,16 @@ def create_app():
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
+    # cap request body to the web-upload limit (+ small overhead)
+    app.config["MAX_CONTENT_LENGTH"] = (Config.MAX_WEB_UPLOAD_MB + 8) * 1024 * 1024
+
     db.init_app(app)
 
     from .api import api_bp
     app.register_blueprint(api_bp)
+
+    from .uploads import uploads_bp
+    app.register_blueprint(uploads_bp)
 
     from .admin import init_admin
     init_admin(app)

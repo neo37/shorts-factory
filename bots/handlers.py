@@ -185,15 +185,25 @@ async def on_approve(cb: CallbackQuery, bot: Bot):
 
 
 # ---------------- media uploads (grouped per project) ----------------
+async def _too_big_link(message: Message, size: int):
+    """Mint a web-upload link for the user's active project and tell them to use it."""
+    with ctx():
+        user = billing.get_or_create_user(message.from_user.id)
+        proj = billing.get_active_project(user)
+        url = billing.make_upload_link(user, proj)
+    await message.answer(texts.with_footer(texts.media_too_big((size or 0) / 1024 / 1024, url)),
+                         disable_web_page_preview=False)
+
+
 async def _add_media(bot: Bot, message: Message, file_id: str, suffix: str, size: int):
     if size and size > MAX_MEDIA_BYTES:
-        await message.answer(texts.with_footer(texts.media_too_big(size / 1024 / 1024)))
+        await _too_big_link(message, size)
         return
     try:
         path = await _stage_file(bot, file_id, suffix, message.from_user.id, "media")
-    except Exception as e:  # noqa: BLE001
-        log.warning("media download failed: %s", e)
-        await message.answer(texts.with_footer(texts.media_too_big((size or 0) / 1024 / 1024)))
+    except Exception as e:  # noqa: BLE001 — >20MB or transient: fall back to web upload
+        log.warning("media download failed (%s); offering web upload", e)
+        await _too_big_link(message, size)
         return
     with ctx():
         user = billing.get_or_create_user(message.from_user.id)

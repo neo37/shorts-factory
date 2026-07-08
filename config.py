@@ -35,6 +35,12 @@ class Config:
     PROJECT_FOOTER_URL = os.getenv("PROJECT_FOOTER_URL", "https://videos.ai3d.art")
     TOPUP_CONTACT_URL = os.getenv("TOPUP_CONTACT_URL", "https://t.me/kiselev_vasilli_andreevichd")
 
+    # --- Web upload (for media larger than Telegram's ~20 MB bot limit) ---
+    # Public base URL the bot puts in the upload link; must reach this Flask app.
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
+    MAX_WEB_UPLOAD_MB = int(os.getenv("MAX_WEB_UPLOAD_MB", "500"))
+    UPLOAD_TOKEN_TTL_HOURS = int(os.getenv("UPLOAD_TOKEN_TTL_HOURS", "24"))
+
     # --- Celery / Redis ---
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)

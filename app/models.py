@@ -107,6 +107,35 @@ class Job(db.Model):
         return f"<Job {self.id} {self.status}>"
 
 
+class UploadToken(db.Model):
+    """One-off web upload link for media too large for Telegram's bot limit."""
+    __tablename__ = "upload_tokens"
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(48), unique=True, index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"))
+    telegram_id = db.Column(db.BigInteger)
+    uploaded = db.Column(db.Integer, default=0)     # files uploaded via this link
+    expires_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=_now)
+
+    @staticmethod
+    def generate(user, project, ttl_hours):
+        from datetime import timedelta
+        return UploadToken(
+            token=secrets.token_urlsafe(24), user_id=user.id, project_id=project.id,
+            telegram_id=user.telegram_id, expires_at=_now() + timedelta(hours=ttl_hours),
+        )
+
+    def is_valid(self):
+        exp = self.expires_at
+        if exp is None:
+            return True
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        return _now() <= exp
+
+
 class ApiKey(db.Model):
     """External API key for OpenAI-compatible /v1 endpoints."""
     __tablename__ = "api_keys"

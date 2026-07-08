@@ -2,7 +2,7 @@
 import json
 
 from config import Config
-from .models import db, User, Project
+from .models import db, User, Project, UploadToken
 
 
 def get_or_create_user(telegram_id, username=None, first_name=None):
@@ -106,3 +106,11 @@ def add_project_media(project, path):
 
 def project_media(project):
     return json.loads(project.media_json) if project.media_json else []
+
+
+def make_upload_link(user, project):
+    """Mint a one-off web upload token and return the full URL for big-media upload."""
+    tok = UploadToken.generate(user, project, Config.UPLOAD_TOKEN_TTL_HOURS)
+    db.session.add(tok)
+    db.session.commit()
+    return f"{Config.PUBLIC_BASE_URL.rstrip('/')}/upload/{tok.token}"
