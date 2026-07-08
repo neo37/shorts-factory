@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VideoBot · Shorts из промта</title>
+<meta name="description" content="Telegram-бот, который превращает промт в брендированный вертикальный Shorts. / A Telegram bot that turns a prompt into a branded vertical Short.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000; --panel:#141414; --panel2:#1c1c1e; --primary:#7C88FC; --accent:#FF8562;
+    --fg:#fff; --fg2:rgba(255,255,255,.72); --muted:rgba(255,255,255,.52); --border:rgba(255,255,255,.08);
+    --font:"Manrope",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--fg);font-family:var(--font);line-height:1.5;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .glow{position:fixed;inset:-30% -10% auto -10%;height:70vh;pointer-events:none;z-index:0;
+    background:radial-gradient(60% 60% at 30% 20%,rgba(124,136,252,.20),transparent 70%),
+               radial-gradient(50% 50% at 80% 10%,rgba(255,133,98,.14),transparent 70%);filter:blur(10px)}
+
+  header{position:sticky;top:0;z-index:10;backdrop-filter:blur(12px);background:rgba(0,0,0,.55);border-bottom:1px solid var(--border)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .brand{font-weight:800;letter-spacing:-.02em;font-size:22px}
+  .brand b{color:var(--primary)}
+  .lang{display:flex;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:4px}
+  .lang button{font-family:inherit;font-weight:700;font-size:14px;color:var(--muted);background:none;border:0;
+    padding:7px 14px;border-radius:999px;cursor:pointer}
+  .lang button.on{background:var(--primary);color:#0B0D2A}
+
+  section{position:relative;z-index:1}
+  .hero{padding:96px 0 72px;text-align:center}
+  .eyebrow{font-weight:700;text-transform:uppercase;letter-spacing:.16em;font-size:14px;color:var(--accent)}
+  h1{font-weight:800;letter-spacing:-.03em;font-size:clamp(40px,7vw,84px);line-height:1.04;margin:20px 0 0}
+  h1 .p{color:var(--primary)}
+  .sub{font-size:clamp(17px,2.4vw,23px);color:var(--fg2);max-width:640px;margin:26px auto 0}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:40px}
+  .btn{font-weight:800;font-size:18px;padding:18px 34px;border-radius:999px;cursor:pointer;border:0;font-family:inherit}
+  .btn.primary{background:var(--primary);color:#0B0D2A}
+  .btn.ghost{background:var(--panel);color:var(--fg);border:1px solid var(--border)}
+  .note{margin-top:18px;font-size:15px;color:var(--muted)}
+
+  h2{font-weight:800;letter-spacing:-.02em;font-size:clamp(28px,4vw,44px);text-align:center;margin-bottom:14px}
+  .lead{text-align:center;color:var(--fg2);max-width:620px;margin:0 auto 46px}
+  .block{padding:72px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:22px;padding:30px}
+  .card .ic{font-size:34px}
+  .card h3{font-size:22px;font-weight:800;margin:16px 0 8px;letter-spacing:-.01em}
+  .card p{color:var(--fg2);font-size:16px}
+
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;counter-reset:s}
+  .step{background:var(--panel);border:1px solid var(--border);border-radius:22px;padding:28px;position:relative}
+  .step:before{counter-increment:s;content:counter(s);position:absolute;top:-16px;left:24px;width:44px;height:44px;
+    display:grid;place-items:center;background:var(--primary);color:#0B0D2A;font-weight:800;border-radius:12px;font-size:20px}
+  .step h3{margin:14px 0 6px;font-size:19px}
+  .step p{color:var(--fg2);font-size:15px}
+
+  .price{max-width:560px;margin:0 auto;background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--border);border-radius:26px;padding:44px;text-align:center}
+  .price .big{font-weight:800;font-size:64px;letter-spacing:-.03em}
+  .price .big span{color:var(--primary)}
+  .price ul{list-style:none;margin:26px 0 0;text-align:left;display:inline-block}
+  .price li{padding:8px 0;color:var(--fg2);font-size:17px}
+  .price li:before{content:"✓ ";color:var(--primary);font-weight:800}
+
+  footer{border-top:1px solid var(--border);padding:48px 0;text-align:center;color:var(--muted);font-size:15px}
+  footer a{color:var(--primary);font-weight:700}
+  .foot-links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<header><div class="wrap nav">
+  <div class="brand">video<b>bot</b></div>
+  <div class="lang" id="lang">
+    <button data-lang="en">EN</button>
+    <button data-lang="ru">RU</button>
+  </div>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <div class="eyebrow" data-i18n="hero_eyebrow"></div>
+  <h1 data-i18n-html="hero_title"></h1>
+  <p class="sub" data-i18n="hero_sub"></p>
+  <div class="cta">
+    <a class="btn primary" href="https://t.me/kiselev_vasilli_andreevichd" data-i18n="cta_start"></a>
+    <a class="btn ghost" href="#how" data-i18n="cta_how"></a>
+  </div>
+  <div class="note" data-i18n="hero_note"></div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2 data-i18n="feat_h"></h2>
+  <p class="lead" data-i18n="feat_lead"></p>
+  <div class="grid">
+    <div class="card"><div class="ic">⚡</div><h3 data-i18n="f1_h"></h3><p data-i18n="f1_p"></p></div>
+    <div class="card"><div class="ic">🎨</div><h3 data-i18n="f2_h"></h3><p data-i18n="f2_p"></p></div>
+    <div class="card"><div class="ic">🖼️</div><h3 data-i18n="f3_h"></h3><p data-i18n="f3_p"></p></div>
+    <div class="card"><div class="ic">🗣️</div><h3 data-i18n="f4_h"></h3><p data-i18n="f4_p"></p></div>
+    <div class="card"><div class="ic">🔁</div><h3 data-i18n="f5_h"></h3><p data-i18n="f5_p"></p></div>
+    <div class="card"><div class="ic">🔌</div><h3 data-i18n="f6_h"></h3><p data-i18n="f6_p"></p></div>
+  </div>
+</div></section>
+
+<section class="block" id="how" style="background:#0a0a0a"><div class="wrap">
+  <h2 data-i18n="how_h"></h2>
+  <p class="lead" data-i18n="how_lead"></p>
+  <div class="steps">
+    <div class="step"><h3 data-i18n="s1_h"></h3><p data-i18n="s1_p"></p></div>
+    <div class="step"><h3 data-i18n="s2_h"></h3><p data-i18n="s2_p"></p></div>
+    <div class="step"><h3 data-i18n="s3_h"></h3><p data-i18n="s3_p"></p></div>
+    <div class="step"><h3 data-i18n="s4_h"></h3><p data-i18n="s4_p"></p></div>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2 data-i18n="price_h"></h2>
+  <p class="lead" data-i18n="price_lead"></p>
+  <div class="price">
+    <div class="big" data-i18n-html="price_big"></div>
+    <ul>
+      <li data-i18n="price_1"></li>
+      <li data-i18n="price_2"></li>
+      <li data-i18n="price_3"></li>
+      <li data-i18n="price_4"></li>
+    </ul>
+    <div class="cta" style="margin-top:34px">
+      <a class="btn primary" href="https://t.me/kiselev_vasilli_andreevichd" data-i18n="cta_topup"></a>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="foot-links">
+    <a href="https://videos.ai3d.art">videos.ai3d.art</a>
+    <a href="https://t.me/kiselev_vasilli_andreevichd" data-i18n="foot_contact"></a>
+  </div>
+  <div data-i18n="foot_by"></div>
+</div></footer>
+
+<script>
+const I18N = {
+  en: {
+    hero_eyebrow: "AI Shorts factory · Telegram",
+    hero_title: 'Turn a prompt into a <span class="p">branded Short</span>',
+    hero_sub: "Describe a topic in a Telegram bot — get a storyboard, a voice-over draft, and a finished vertical video in your brand style. Refine in a loop, approve, download.",
+    cta_start: "Start in Telegram",
+    cta_how: "How it works",
+    hero_note: "100 free credits for new users · 1 video = 1 credit",
+    feat_h: "Everything to ship Shorts at scale",
+    feat_lead: "One bot = one design style. Bring your own photos and videos, or mix in stock.",
+    f1_h: "Prompt → video", f1_p: "A free-form prompt becomes a structured storyboard, captions and narration — automatically.",
+    f2_h: "Your brand style", f2_p: "Every render follows a fixed design preset. Consistent, recognizable, on-brand.",
+    f3_h: "Your media", f3_p: "Attach photos and videos (≤20 MB). Use your own footage, external stock, or a mix — grouped by project.",
+    f4_h: "Voice-over", f4_p: "Male or female narration with natural pacing and correct product pronunciation.",
+    f5_h: "Refinement loop", f5_p: "Approve, amend, or decline. Edits are free — you only pay once per video.",
+    f6_h: "Developer API", f6_p: "OpenAI-compatible /v1 endpoints for chat and speech, reusable by external apps.",
+    how_h: "From idea to Short in 4 steps",
+    how_lead: "You stay in control at every step.",
+    s1_h: "Send a prompt", s1_p: "Describe your topic in the bot and (optionally) attach media.",
+    s2_h: "Get a storyboard", s2_p: "Scenes, captions and a narration draft come back in seconds.",
+    s3_h: "Refine", s3_p: "Amend as many times as you like — corrections are free.",
+    s4_h: "Approve & render", s4_p: "The finished vertical video is delivered right in the chat.",
+    price_h: "Simple pricing",
+    price_lead: "Start free. Top up when you're ready to remove the watermark.",
+    price_big: '500 ₽ = <span>5 videos</span>',
+    price_1: "100 free credits on sign-up",
+    price_2: "1 video = 1 credit · edits are free",
+    price_3: "Watermark removed after top-up",
+    price_4: "Manual top-up via Telegram",
+    cta_topup: "Top up via Telegram",
+    foot_contact: "Contact / top-up",
+    foot_by: "Made for videos.ai3d.art · author Vasily Kiselev",
+  },
+  ru: {
+    hero_eyebrow: "Фабрика AI-Shorts · Telegram",
+    hero_title: 'Промт → <span class="p">брендированный Shorts</span>',
+    hero_sub: "Опишите тему в Telegram-боте — получите раскадровку, черновик озвучки и готовое вертикальное видео в вашем фирменном стиле. Дорабатывайте в цикле, утверждайте, скачивайте.",
+    cta_start: "Начать в Telegram",
+    cta_how: "Как это работает",
+    hero_note: "100 бесплатных кредитов новым · 1 видео = 1 кредит",
+    feat_h: "Всё, чтобы штамповать Shorts на потоке",
+    feat_lead: "Один бот = один стиль. Свои фото и видео — или микс со стоками.",
+    f1_h: "Промт → видео", f1_p: "Свободный промт автоматически превращается в раскадровку, субтитры и озвучку.",
+    f2_h: "Ваш фирменный стиль", f2_p: "Каждый рендер следует фиксированному пресету. Узнаваемо и в бренде.",
+    f3_h: "Ваши медиа", f3_p: "Прикладывайте фото и видео (≤20 МБ). Свои материалы, стоки или микс — с группировкой по проектам.",
+    f4_h: "Озвучка", f4_p: "Мужской или женский голос, естественный темп и правильное произношение продукта.",
+    f5_h: "Цикл правок", f5_p: "Утвердить, дополнить или отказаться. Правки бесплатны — платите один раз за видео.",
+    f6_h: "API для разработчиков", f6_p: "OpenAI-совместимые /v1 эндпоинты для чата и озвучки — для внешних проектов.",
+    how_h: "От идеи до Shorts за 4 шага",
+    how_lead: "Вы контролируете каждый шаг.",
+    s1_h: "Отправьте промт", s1_p: "Опишите тему в боте и (по желанию) приложите медиа.",
+    s2_h: "Получите раскадровку", s2_p: "Сцены, субтитры и черновик озвучки — за секунды.",
+    s3_h: "Дорабатывайте", s3_p: "Правьте сколько угодно — корректировки бесплатны.",
+    s4_h: "Утвердите и рендерьте", s4_p: "Готовое вертикальное видео прилетает прямо в чат.",
+    price_h: "Простые цены",
+    price_lead: "Старт бесплатно. Пополняйте, когда готовы убрать watermark.",
+    price_big: '500 ₽ = <span>5 видео</span>',
+    price_1: "100 бесплатных кредитов при старте",
+    price_2: "1 видео = 1 кредит · правки бесплатны",
+    price_3: "Watermark убирается после пополнения",
+    price_4: "Ручное пополнение через Telegram",
+    cta_topup: "Пополнить через Telegram",
+    foot_contact: "Связаться / пополнить",
+    foot_by: "Сделано для videos.ai3d.art · автор Василий Киселёв",
+  }
+};
+
+function applyLang(lang){
+  const dict = I18N[lang] || I18N.en;
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const k = el.getAttribute("data-i18n"); if(dict[k]!=null) el.textContent = dict[k];
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach(el=>{
+    const k = el.getAttribute("data-i18n-html"); if(dict[k]!=null) el.innerHTML = dict[k];
+  });
+  document.querySelectorAll("#lang button").forEach(b=>b.classList.toggle("on", b.dataset.lang===lang));
+  try{ localStorage.setItem("vb_lang", lang);}catch(e){}
+}
+
+function detectLang(){
+  try{ const saved = localStorage.getItem("vb_lang"); if(saved) return saved; }catch(e){}
+  const langs = navigator.languages || [navigator.language || "en"];
+  for(const l of langs){ if((l||"").toLowerCase().startsWith("ru")) return "ru"; }
+  return "en";
+}
+
+document.querySelectorAll("#lang button").forEach(b=>b.addEventListener("click",()=>applyLang(b.dataset.lang)));
+applyLang(detectLang());
+</script>
+</body>
+</html>

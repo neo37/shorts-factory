@@ -1,0 +1,16 @@
+[Unit]
+Description=VideoBot Celery worker (single-threaded render queue)
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=n36
+WorkingDirectory=/home/n36/VIDEO/OpenMontage/videobot
+EnvironmentFile=/home/n36/VIDEO/OpenMontage/videobot/.env
+# concurrency=1 is mandatory: OpenMontage render (ffmpeg/puppeteer) must not run in parallel.
+ExecStart=/home/n36/VIDEO/OpenMontage/videobot/.venv/bin/celery -A app.celery_app.celery worker --loglevel=INFO --concurrency=1 -Q videobot -n videobot@%%h
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,103 @@
+"""SQLAlchemy models: users, bots, design presets, jobs (queue), external API keys."""
+import secrets
+from datetime import datetime, timezone
+
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+class User(db.Model):
+    __tablename__ = "users"
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_id = db.Column(db.BigInteger, unique=True, index=True, nullable=False)
+    username = db.Column(db.String(128))
+    first_name = db.Column(db.String(128))
+    credits = db.Column(db.Integer, default=0, nullable=False)
+    # is_paid removes the demo watermark; the videos.ai3d.art footer is ALWAYS kept.
+    is_paid = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=_now)
+
+    def __repr__(self):
+        return f"<User tg={self.telegram_id} credits={self.credits}>"
+
+
+class Bot(db.Model):
+    __tablename__ = "bots"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128))
+    token = db.Column(db.String(128), unique=True, nullable=False)
+    # One bot = one fixed design style (preset id / slug in OpenMontage).
+    design_style = db.Column(db.String(64), nullable=False, default="businesspad-dark")
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=_now)
+
+    def __repr__(self):
+        return f"<Bot {self.name} style={self.design_style}>"
+
+
+class Preset(db.Model):
+    """Design-style preset metadata (maps to an OpenMontage template)."""
+    __tablename__ = "presets"
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(64), unique=True, nullable=False)
+    title = db.Column(db.String(128))
+    description = db.Column(db.Text)
+    # Path (relative to OpenMontage) to an example render shown via "Смотреть примеры".
+    example_render = db.Column(db.String(256))
+    created_at = db.Column(db.DateTime, default=_now)
+
+    def __repr__(self):
+        return f"<Preset {self.slug}>"
+
+
+class Job(db.Model):
+    __tablename__ = "jobs"
+    STATUS = ("queued", "processing", "awaiting_user", "rendering", "done", "error", "cancelled")
+
+    id = db.Column(db.Integer, primary_key=True)
+    celery_id = db.Column(db.String(64), index=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey("bots.id"))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    telegram_id = db.Column(db.BigInteger, index=True)
+    chat_id = db.Column(db.BigInteger)
+
+    design_style = db.Column(db.String(64))
+    prompt = db.Column(db.Text)                # latest effective prompt (prompt + corrections)
+    corrections = db.Column(db.Text)           # accumulated correction notes
+    storyboard_json = db.Column(db.Text)       # structured storyboard from LLM
+    vo_draft = db.Column(db.Text)              # draft narration text
+    media_json = db.Column(db.Text)            # JSON list of user-uploaded media file paths
+    watermark = db.Column(db.Boolean, default=True)
+    status = db.Column(db.String(16), default="queued", index=True)
+    error = db.Column(db.Text)
+    output_path = db.Column(db.String(256))
+    created_at = db.Column(db.DateTime, default=_now)
+    updated_at = db.Column(db.DateTime, default=_now, onupdate=_now)
+
+    bot = db.relationship("Bot", backref="jobs")
+    user = db.relationship("User", backref="jobs")
+
+    def __repr__(self):
+        return f"<Job {self.id} {self.status}>"
+
+
+class ApiKey(db.Model):
+    """External API key for OpenAI-compatible /v1 endpoints."""
+    __tablename__ = "api_keys"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128))
+    key = db.Column(db.String(72), unique=True, index=True, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=_now)
+
+    @staticmethod
+    def generate(name="external"):
+        return ApiKey(name=name, key="vbp-" + secrets.token_urlsafe(36))
+
+    def __repr__(self):
+        return f"<ApiKey {self.name} active={self.is_active}>"

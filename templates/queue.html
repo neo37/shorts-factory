@@ -1,0 +1,35 @@
+{% extends 'admin/master.html' %}
+{% block body %}
+<div class="container" style="margin-top:20px">
+  <h2>Очередь задач</h2>
+  <a class="btn btn-danger" href="{{ url_for('queue.purge') }}"
+     onclick="return confirm('Сбросить всю очередь?')">Сбросить всю очередь</a>
+
+  <h3 style="margin-top:24px">Активные</h3>
+  <table class="table table-striped">
+    <thead><tr><th>ID</th><th>Бот</th><th>Пользователь</th><th>Стиль</th><th>Статус</th><th></th></tr></thead>
+    <tbody>
+    {% for j in active %}
+      <tr>
+        <td>{{ j.id }}</td><td>{{ j.bot_id }}</td><td>{{ j.telegram_id }}</td>
+        <td>{{ j.design_style }}</td><td><b>{{ j.status }}</b></td>
+        <td><a class="btn btn-sm btn-warning" href="{{ url_for('queue.cancel', job_id=j.id) }}">Отменить</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6"><i>пусто</i></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h3 style="margin-top:24px">Последние 50</h3>
+  <table class="table">
+    <thead><tr><th>ID</th><th>Статус</th><th>Стиль</th><th>Пользователь</th><th>Создано</th></tr></thead>
+    <tbody>
+    {% for j in recent %}
+      <tr><td>{{ j.id }}</td><td>{{ j.status }}</td><td>{{ j.design_style }}</td>
+          <td>{{ j.telegram_id }}</td><td>{{ j.created_at }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

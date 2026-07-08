@@ -1,0 +1,15 @@
+[Unit]
+Description=VideoBot Telegram multibot poller
+After=network.target videobot-web.service
+
+[Service]
+Type=simple
+User=n36
+WorkingDirectory=/home/n36/VIDEO/OpenMontage/videobot
+EnvironmentFile=/home/n36/VIDEO/OpenMontage/videobot/.env
+ExecStart=/home/n36/VIDEO/OpenMontage/videobot/.venv/bin/python -m bots.runner
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
