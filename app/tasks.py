@@ -23,7 +23,12 @@ def _app():
 def _notify(job):
     """Best-effort push of a status change back to the user via their bot."""
     try:
-        from bots.notify import notify_job  # optional; safe if bots not running
+        import os
+        import sys
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from bots.notify import notify_job  # project root ensured above
         notify_job(job)
     except Exception as e:  # noqa: BLE001
         log.exception("notify failed: %s", e)
