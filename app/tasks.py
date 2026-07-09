@@ -26,7 +26,7 @@ def _notify(job):
         from bots.notify import notify_job  # optional; safe if bots not running
         notify_job(job)
     except Exception as e:  # noqa: BLE001
-        log.debug("notify skipped: %s", e)
+        log.exception("notify failed: %s", e)
 
 
 def _run_storyboard(job):

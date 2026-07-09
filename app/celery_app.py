@@ -1,6 +1,15 @@
 """Celery instance. Broker/back-end = Redis. Rendering stays single-threaded (TZ §4):
 run the worker with --concurrency=1. Set CELERY_TASK_ALWAYS_EAGER=1 for local dev without Redis.
 """
+import os
+import sys
+
+# Ensure the project root (parent of app/) is importable inside forked workers,
+# so `bots.*` resolves regardless of the worker's CWD (fixes 'No module named bots').
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 from celery import Celery
 from config import Config
 
