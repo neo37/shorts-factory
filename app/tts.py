@@ -69,13 +69,24 @@ def _synth_openai(text, voice, out_path, fmt):
     if not Config.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY not set")
     client = OpenAI(api_key=Config.OPENAI_API_KEY)
-    instr = ("Speak in Russian. Pronounce 'бизнес-па́д' with the stress on the final "
-             "syllable 'пад'. Clear, confident, natural pacing.")
-    with client.audio.speech.with_streaming_response.create(
-        model="gpt-4o-mini-tts", voice=voice, input=text,
-        instructions=instr, response_format=fmt,
-    ) as resp:
-        resp.stream_to_file(out_path)
+    instr = ("Speak in Russian. Clear, confident, natural pacing. Read any stress marks "
+             "(combining accents) as written.")
+    model = "gpt-4o-mini-tts"
+    # `instructions` is only supported on newer SDKs/models — degrade gracefully.
+    for kwargs in ({"instructions": instr}, {}):
+        try:
+            with client.audio.speech.with_streaming_response.create(
+                model=model, voice=voice, input=text, response_format=fmt, **kwargs,
+            ) as resp:
+                resp.stream_to_file(out_path)
+            return
+        except TypeError:
+            continue  # SDK doesn't accept `instructions` — retry without it
+        except Exception:
+            # instructions rejected by the model/endpoint → fall back to plain call
+            if kwargs:
+                continue
+            raise
 
 
 def synthesize(text, out_path, voice=None, gender="female", fmt="mp3"):
