@@ -1,6 +1,6 @@
 """External OpenAI-compatible API (Bearer <api_key> from the ApiKey table).
 
-  POST /v1/chat/completions -> proxied to Ollama (uncensored model)
+  POST /v1/chat/completions -> proxied to Ollama
   POST /v1/audio/speech     -> TTS engine (supports бизнес-пáд stress, male/female)
 """
 import io

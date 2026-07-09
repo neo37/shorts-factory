@@ -59,7 +59,7 @@ render OpenMontage ≈8). Vidi [DEPLOY.md](DEPLOY.md).
 | Red zadataka | **Celery** | https://docs.celeryq.dev |
 | Broker | **Redis** | https://redis.io |
 | Telegram | **aiogram** | https://docs.aiogram.dev |
-| LLM runtime | **Ollama** (model: `qwen2.5:7b-instruct`) | https://ollama.com |
+| LLM runtime | **Ollama** (model: `qwen2.5:3b-instruct`) | https://ollama.com |
 | TTS | **Kokoro-FastAPI** | https://github.com/remsky/Kokoro-FastAPI |
 | TTS | **Piper** | https://github.com/rhasspy/piper |
 | TTS (fallback) | **OpenAI** | https://github.com/openai/openai-python |

@@ -59,7 +59,7 @@
 | Очередь задач | **Celery** | https://docs.celeryq.dev |
 | Брокер | **Redis** | https://redis.io |
 | Telegram | **aiogram** | https://docs.aiogram.dev |
-| LLM-рантайм | **Ollama** (модель: `qwen2.5:7b-instruct`) | https://ollama.com |
+| LLM-рантайм | **Ollama** (модель: `qwen2.5:3b-instruct`) | https://ollama.com |
 | TTS | **Kokoro-FastAPI** | https://github.com/remsky/Kokoro-FastAPI |
 | TTS | **Piper** | https://github.com/rhasspy/piper |
 | TTS (fallback) | **OpenAI** | https://github.com/openai/openai-python |

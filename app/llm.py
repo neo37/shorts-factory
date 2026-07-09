@@ -1,4 +1,4 @@
-"""LLM access via Ollama (OpenAI-compatible, uncensored model).
+"""LLM access via Ollama (OpenAI-compatible).
 
 Produces a structured storyboard + draft narration from a free-form user prompt.
 Falls back to a deterministic template if Ollama is unreachable (keeps local dev working).

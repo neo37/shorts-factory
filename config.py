@@ -48,10 +48,10 @@ class Config:
     # If Redis is unavailable locally, run tasks synchronously (dev only).
     CELERY_TASK_ALWAYS_EAGER = _bool(os.getenv("CELERY_TASK_ALWAYS_EAGER"), False)
 
-    # --- LLM (Ollama, OpenAI-compatible, uncensored) ---
+    # --- LLM (Ollama, OpenAI-compatible) ---
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
     OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")  # ignored by Ollama
-    LLM_MODEL = os.getenv("LLM_MODEL", "huihui_ai/qwen2.5-abliterate:7b")
+    LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:3b-instruct")
     LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))
 
     # --- TTS engine (OpenAI-compatible /v1/audio/speech backend) ---
