@@ -20,8 +20,9 @@ from app.models import db, Job, Project
 from app import billing
 from app.presets import example_paths
 from . import texts
-from .keyboards import (after_approve_media_kb, main_menu_kb, media_source_kb,
+from .keyboards import (after_approve_media_kb, design_kb, main_menu_kb, media_source_kb,
                         pick_project_media_kb, projects_kb, review_kb)
+from app.presets import THEMES
 
 log = logging.getLogger("videobot.handlers")
 router = Router()
@@ -31,6 +32,12 @@ _token_map = {}                 # token -> {"bot_id", "design_style"}
 _awaiting_correction = {}       # (token, tg_id) -> job_id
 _awaiting_project_name = set()  # {(token, tg_id)}
 _awaiting_render_media = {}     # (token, tg_id) -> job_id  (approved, gathering media before render)
+_awaiting_design_url = set()    # {(token, tg_id)}  (waiting for a site URL to derive a theme)
+
+
+def _menu_kw(user, proj):
+    return dict(project_name=proj.name, media_source=proj.media_source,
+                design_style=proj.design_style, theme_json=proj.theme_json)
 
 MAX_MEDIA_BYTES = texts.MAX_MEDIA_MB * 1024 * 1024
 
@@ -69,9 +76,9 @@ async def on_start(message: Message, bot: Bot):
         user = billing.get_or_create_user(
             message.from_user.id, message.from_user.username, message.from_user.first_name)
         proj = billing.get_active_project(user)
-        credits, pname, psrc = user.credits, proj.name, proj.media_source
+        credits, kw = user.credits, _menu_kw(user, proj)
     await message.answer(texts.with_footer(texts.intro(credits)),
-                         reply_markup=main_menu_kb(pname, psrc))
+                         reply_markup=main_menu_kb(**kw))
 
 
 # ---------------- project menu ----------------
@@ -93,9 +100,9 @@ async def on_proj_use(cb: CallbackQuery, bot: Bot):
     with ctx():
         user = billing.get_or_create_user(cb.from_user.id)
         proj = billing.set_active_project(user, pid)
-        name, src = (proj.name, proj.media_source) if proj else ("Мой проект", "mix")
-    await cb.message.answer(texts.with_footer(f"✅ Активный проект: <b>{name}</b>"),
-                            reply_markup=main_menu_kb(name, src))
+        kw = _menu_kw(user, proj)
+    await cb.message.answer(texts.with_footer(f"✅ Активный проект: <b>{kw['project_name']}</b>"),
+                            reply_markup=main_menu_kb(**kw))
     await cb.answer()
 
 
@@ -124,9 +131,42 @@ async def on_src_set(cb: CallbackQuery, bot: Bot):
         user = billing.get_or_create_user(cb.from_user.id)
         proj = billing.get_active_project(user)
         billing.set_media_source(proj, src)
-        name = proj.name
+        kw = _menu_kw(user, proj)
     await cb.message.answer(texts.with_footer(texts.source_set(src)),
-                            reply_markup=main_menu_kb(name, src))
+                            reply_markup=main_menu_kb(**kw))
+    await cb.answer()
+
+
+# ---------------- design picker ----------------
+@router.callback_query(F.data == "design:menu")
+async def on_design_menu(cb: CallbackQuery, bot: Bot):
+    with ctx():
+        user = billing.get_or_create_user(cb.from_user.id)
+        proj = billing.get_active_project(user)
+        cur = proj.design_style
+        label = "из сайта" if proj.theme_json else THEMES.get(cur, THEMES["businesspad-dark"])["label"]
+    await cb.message.answer(texts.with_footer(texts.design_menu(label)),
+                            reply_markup=design_kb(cur))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("design:set:"))
+async def on_design_set(cb: CallbackQuery, bot: Bot):
+    slug = cb.data.split(":", 2)[2]
+    with ctx():
+        user = billing.get_or_create_user(cb.from_user.id)
+        proj = billing.get_active_project(user)
+        billing.set_design(proj, slug)
+        label = THEMES.get(slug, THEMES["businesspad-dark"])["label"]
+        kw = _menu_kw(user, proj)
+    await cb.message.answer(texts.with_footer(texts.design_set(label)), reply_markup=main_menu_kb(**kw))
+    await cb.answer()
+
+
+@router.callback_query(F.data == "design:fromurl")
+async def on_design_fromurl(cb: CallbackQuery, bot: Bot):
+    _awaiting_design_url.add((bot.token, cb.from_user.id))
+    await cb.message.answer(texts.with_footer(texts.ask_design_url()))
     await cb.answer()
 
 
@@ -371,14 +411,14 @@ async def on_voice(message: Message, bot: Bot):
         # new voice prompt — charge 1 credit
         if not billing.has_credit(user):
             await message.answer(texts.with_footer(texts.no_credits()),
-                                 reply_markup=main_menu_kb(proj.name, proj.media_source))
+                                 reply_markup=main_menu_kb(**_menu_kw(user, proj)))
             return
         billing.charge(user)
         media = billing.project_media(proj)
         job = Job(
             bot_id=binfo.get("bot_id"), user_id=user.id, project_id=proj.id,
             telegram_id=user.telegram_id, chat_id=message.chat.id,
-            design_style=binfo.get("design_style", "businesspad-dark"),
+            design_style=proj.design_style, theme_json=proj.theme_json,
             media_source=proj.media_source,
             media_json=json.dumps(media) if media else None,
             voice_path=voice_path,
@@ -398,15 +438,37 @@ async def on_text(message: Message, bot: Bot):
     key = (bot.token, message.from_user.id)
     binfo = _token_map.get(bot.token, {})
 
+    # awaiting a site URL to derive a design theme
+    if key in _awaiting_design_url:
+        _awaiting_design_url.discard(key)
+        from app import webfetch
+        from urllib.parse import urlparse
+        url = message.text.strip()
+        loop = asyncio.get_event_loop()
+        theme = await loop.run_in_executor(None, lambda: webfetch.extract_theme(url))
+        with ctx():
+            user = billing.get_or_create_user(message.from_user.id)
+            proj = billing.get_active_project(user)
+            if theme:
+                billing.set_custom_theme(proj, theme)
+                kw = _menu_kw(user, proj)
+                dom = urlparse(url).netloc or url
+                await message.answer(texts.with_footer(texts.design_from_url_ok(dom)),
+                                     reply_markup=main_menu_kb(**kw))
+            else:
+                await message.answer(texts.with_footer(texts.design_from_url_fail()),
+                                     reply_markup=design_kb(proj.design_style))
+        return
+
     # awaiting a new project name
     if key in _awaiting_project_name:
         _awaiting_project_name.discard(key)
         with ctx():
             user = billing.get_or_create_user(message.from_user.id)
             proj = billing.create_project(user, message.text)
-            name, src = proj.name, proj.media_source
-        await message.answer(texts.with_footer(texts.project_created(name)),
-                             reply_markup=main_menu_kb(name, src))
+            kw = _menu_kw(user, proj)
+        await message.answer(texts.with_footer(texts.project_created(kw["project_name"])),
+                             reply_markup=main_menu_kb(**kw))
         return
 
     with ctx():
@@ -430,14 +492,14 @@ async def on_text(message: Message, bot: Bot):
         # new prompt — charge 1 credit
         if not billing.has_credit(user):
             await message.answer(texts.with_footer(texts.no_credits()),
-                                 reply_markup=main_menu_kb(proj.name, proj.media_source))
+                                 reply_markup=main_menu_kb(**_menu_kw(user, proj)))
             return
         billing.charge(user)
         media = billing.project_media(proj)
         job = Job(
             bot_id=binfo.get("bot_id"), user_id=user.id, project_id=proj.id,
             telegram_id=user.telegram_id, chat_id=message.chat.id,
-            design_style=binfo.get("design_style", "businesspad-dark"),
+            design_style=proj.design_style, theme_json=proj.theme_json,
             media_source=proj.media_source,
             media_json=json.dumps(media) if media else None,
             prompt=message.text,

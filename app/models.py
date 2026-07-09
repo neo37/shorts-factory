@@ -66,6 +66,8 @@ class Project(db.Model):
     name = db.Column(db.String(128), default="Мой проект")
     media_source = db.Column(db.String(16), default="mix")
     media_json = db.Column(db.Text)            # JSON list of media staged for this project
+    design_style = db.Column(db.String(64), default="businesspad-dark")
+    theme_json = db.Column(db.Text)            # custom theme dict (e.g. derived from a website)
     created_at = db.Column(db.DateTime, default=_now)
 
     def __repr__(self):
@@ -86,6 +88,7 @@ class Job(db.Model):
     chat_id = db.Column(db.BigInteger)
 
     design_style = db.Column(db.String(64))
+    theme_json = db.Column(db.Text)            # snapshot of the custom theme used (if any)
     media_source = db.Column(db.String(16), default="mix")
     voice_path = db.Column(db.String(256))     # staged voice message awaiting transcription
     prompt = db.Column(db.Text)                # latest effective prompt (prompt + corrections)

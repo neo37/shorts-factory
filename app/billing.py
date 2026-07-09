@@ -96,6 +96,20 @@ def set_media_source(project, source):
     return project
 
 
+def set_design(project, slug):
+    project.design_style = slug
+    project.theme_json = None            # picking a preset clears any custom theme
+    db.session.commit()
+    return project
+
+
+def set_custom_theme(project, theme_dict, label="from-url"):
+    project.design_style = label
+    project.theme_json = json.dumps(theme_dict, ensure_ascii=False)
+    db.session.commit()
+    return project
+
+
 def add_project_media(project, path):
     items = json.loads(project.media_json) if project.media_json else []
     items.append(path)

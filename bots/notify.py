@@ -11,7 +11,7 @@ from aiogram.enums import ParseMode
 
 from app.models import db, Bot as BotRow
 from . import texts
-from .keyboards import review_kb
+from .keyboards import done_kb, review_kb
 
 log = logging.getLogger("videobot.notify")
 
@@ -35,10 +35,13 @@ async def _send(job):
         elif job.status == "rendering":
             await bot.send_message(job.chat_id, texts.with_footer(texts.rendering()))
         elif job.status == "done":
-            await bot.send_message(job.chat_id, texts.with_footer(texts.done()))
             if job.output_path:
                 await bot.send_video(job.chat_id, FSInputFile(job.output_path),
-                                     caption=texts.with_footer("🎬"))
+                                     caption=texts.with_footer(texts.done()),
+                                     reply_markup=done_kb(job.id))
+            else:
+                await bot.send_message(job.chat_id, texts.with_footer(texts.done()),
+                                       reply_markup=done_kb(job.id))
         elif job.status == "error":
             await bot.send_message(job.chat_id, texts.with_footer(texts.error(job.error or "unknown")))
     finally:

@@ -3,6 +3,7 @@ buttons because the approval step (TZ §2.6) needs an explicit trigger."""
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from config import Config
+from app.presets import THEMES, PICKER_ORDER
 
 
 def review_kb(job_id: int) -> InlineKeyboardMarkup:
@@ -16,15 +17,42 @@ def review_kb(job_id: int) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def main_menu_kb(project_name: str = None, media_source: str = None) -> InlineKeyboardMarkup:
+def _design_label(slug, theme_json=None):
+    if theme_json:
+        return "🌐 из сайта"
+    return THEMES.get(slug, THEMES["businesspad-dark"])["label"]
+
+
+def done_kb(job_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✏️ Дополнить этот ролик", callback_data=f"amend:{job_id}")
+    b.button(text="💳 Пополнить баланс", url=Config.TOPUP_CONTACT_URL)
+    b.adjust(1)
+    return b.as_markup()
+
+
+def main_menu_kb(project_name: str = None, media_source: str = None,
+                 design_style: str = None, theme_json=None) -> InlineKeyboardMarkup:
     src_label = {"user": "свои медиа", "stock": "стоки", "mix": "микс"}.get(media_source or "mix", "микс")
     rows = [
         [InlineKeyboardButton(text=f"🗂 Проект: {project_name or 'Мой проект'}",
                               callback_data="proj:menu")],
+        [InlineKeyboardButton(text=f"🎨 Дизайн: {_design_label(design_style, theme_json)}",
+                              callback_data="design:menu")],
         [InlineKeyboardButton(text=f"🖼 Источник медиа: {src_label}", callback_data="src:menu")],
         [InlineKeyboardButton(text="💳 Связаться / Пополнить баланс", url=Config.TOPUP_CONTACT_URL)],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def design_kb(active_slug: str = None) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for slug in PICKER_ORDER:
+        mark = "✅ " if slug == active_slug else ""
+        b.button(text=f"{mark}{THEMES[slug]['label']}", callback_data=f"design:set:{slug}")
+    b.button(text="🌐 Придумать из сайта (по ссылке)", callback_data="design:fromurl")
+    b.adjust(1)
+    return b.as_markup()
 
 
 def media_source_kb() -> InlineKeyboardMarkup:

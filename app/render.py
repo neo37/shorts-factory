@@ -95,7 +95,8 @@ def _esc(s):
     return html.escape(str(s or ""))
 
 
-def _compose_html(storyboard, segs, total, has_music, has_logo, watermark, footer_url, media_rel=None):
+def _compose_html(storyboard, segs, total, has_music, has_logo, watermark, footer_url,
+                  theme, media_rel=None):
     scenes = storyboard.get("scenes", [])
     media_rel = media_rel or []
     # scene windows
@@ -142,24 +143,28 @@ def _compose_html(storyboard, segs, total, has_music, has_logo, watermark, foote
                        f'data-start="0" data-duration="{total}" data-volume="0.07"></audio>')
     watermark_div = ('<div class="wm">DEMO · пополни баланс, чтобы убрать</div>' if watermark else "")
 
+    t = theme
+    up = "uppercase" if t.get("eyebrow_upper", True) else "none"
+    card = (f"border:{t['border']};border-radius:{t['radius']}px;"
+            f"box-shadow:{t['shadow']};") if (t.get("border") != "none" or t.get("shadow") != "none") else ""
     return f"""<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8"><title>{_esc(storyboard.get('title'))}</title>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="{t['font_url']}" rel="stylesheet">
 <style>
-:root{{--bg:#000;--panel:#1A1A1A;--primary:#7C88FC;--accent:#FF8562;--fg:#fff;--fg2:rgba(255,255,255,.72);--muted:rgba(255,255,255,.5);--font:"Manrope",system-ui,sans-serif;}}
+:root{{--bg:{t['bg']};--panel:{t['panel']};--primary:{t['primary']};--accent:{t['accent']};--fg:{t['fg']};--fg2:{t['fg2']};--muted:{t['muted']};--font:{t['font_family']};}}
 *{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font)}}
 [data-composition-id="root"]{{position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--bg)}}
 .clip{{position:absolute;inset:0}}
 .stage{{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 110px;text-align:center}}
 .media{{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}}
 .mediawrap{{overflow:hidden}}
-.scrim{{position:absolute;inset:0;background:rgba(0,0,0,.5)}}
-.eyebrow{{font-weight:600;font-size:30px;text-transform:uppercase;letter-spacing:.12em;color:var(--fg2)}}
-h1{{font-weight:800;letter-spacing:-.02em;font-size:104px;line-height:1.06;margin:26px 0 0}}
-.cap{{position:absolute;left:80px;right:80px;bottom:230px;text-align:center;font-weight:700;font-size:50px;line-height:1.25;color:#fff}}
+.scrim{{position:absolute;inset:0;background:{t['scrim']}}}
+.eyebrow{{font-weight:600;font-size:30px;text-transform:{up};letter-spacing:.12em;color:var(--fg2)}}
+h1{{font-weight:{t['h1_weight']};letter-spacing:-.02em;font-size:104px;line-height:1.06;margin:26px 0 0;{card}{'padding:30px 44px;background:var(--panel);' if card else ''}}}
+.cap{{position:absolute;left:80px;right:80px;bottom:230px;text-align:center;font-weight:700;font-size:50px;line-height:1.25;color:var(--fg)}}
 .prog{{position:absolute;left:0;bottom:0;height:8px;background:var(--primary);width:0}}
 .footer{{position:absolute;left:0;right:0;bottom:70px;text-align:center;font-weight:600;font-size:30px;color:var(--muted);letter-spacing:.04em}}
-.wm{{position:absolute;left:0;right:0;top:80px;text-align:center;font-weight:700;font-size:30px;color:rgba(255,133,98,.85);letter-spacing:.12em;text-transform:uppercase}}
+.wm{{position:absolute;left:0;right:0;top:80px;text-align:center;font-weight:700;font-size:30px;color:var(--accent);letter-spacing:.12em;text-transform:uppercase}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script></head>
 <body>
@@ -223,10 +228,14 @@ def render_job(job, storyboard, gender="male"):
         # ensure no dangling audio tag if nothing synthesized
         segs = [(None, d) for _, d in segs]
 
+    # resolve theme: custom theme snapshot on the job wins, else the design_style slug
+    from .presets import get_theme
+    theme = get_theme(json.loads(job.theme_json)) if job.theme_json else get_theme(job.design_style)
+
     html_doc = _compose_html(
         storyboard, segs, vo_total, has_music, has_logo,
         watermark=job.watermark, footer_url=Config.PROJECT_FOOTER_URL,
-        media_rel=media_rel,
+        theme=theme, media_rel=media_rel,
     )
     (hf / "index.html").write_text(html_doc, encoding="utf-8")
 

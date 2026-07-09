@@ -123,6 +123,29 @@ def media_taken_from(name: str, count: int) -> str:
     return f"✅ Взято из «<b>{name}</b>». В подборке для рендера: <b>{count}</b>. Нажмите ▶️ Рендерить."
 
 
+def design_menu(current_label: str) -> str:
+    return (f"🎨 Текущий дизайн: <b>{current_label}</b>.\n\n"
+            "Выберите готовый стиль или придумаю новый по ссылке на сайт "
+            "(подсмотрю цвета и подачу).")
+
+
+def design_set(label: str) -> str:
+    return f"✅ Дизайн: <b>{label}</b>."
+
+
+def ask_design_url() -> str:
+    return "🌐 Пришлите ссылку на сайт — соберу дизайн по его цветам и стилю."
+
+
+def design_from_url_ok(domain: str) -> str:
+    return (f"✅ Готово: собрал дизайн по цветам <b>{domain}</b> и выбрал его активным. "
+            "Пришлите промт для видео.")
+
+
+def design_from_url_fail() -> str:
+    return "⚠️ Не удалось разобрать сайт. Выберите готовый стиль или пришлите другую ссылку."
+
+
 def voice_received() -> str:
     return "🎙 Голосовое получено — распознаю речь, затем соберу сценарий…"
 
