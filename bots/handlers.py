@@ -20,7 +20,8 @@ from app.models import db, Job, Project
 from app import billing
 from app.presets import example_paths
 from . import texts
-from .keyboards import main_menu_kb, media_source_kb, projects_kb, review_kb
+from .keyboards import (after_approve_media_kb, main_menu_kb, media_source_kb,
+                        pick_project_media_kb, projects_kb, review_kb)
 
 log = logging.getLogger("videobot.handlers")
 router = Router()
@@ -29,6 +30,7 @@ _flask_app = None
 _token_map = {}                 # token -> {"bot_id", "design_style"}
 _awaiting_correction = {}       # (token, tg_id) -> job_id
 _awaiting_project_name = set()  # {(token, tg_id)}
+_awaiting_render_media = {}     # (token, tg_id) -> job_id  (approved, gathering media before render)
 
 MAX_MEDIA_BYTES = texts.MAX_MEDIA_MB * 1024 * 1024
 
@@ -167,20 +169,110 @@ async def on_examples(cb: CallbackQuery, bot: Bot):
     await cb.answer()
 
 
+async def _start_render(bot: Bot, chat_id, job_id, key):
+    from app.tasks import render_final
+    with ctx():
+        job = db.session.get(Job, job_id)
+        job.status = "queued"
+        db.session.commit()
+    _awaiting_render_media.pop(key, None)
+    _awaiting_correction.pop(key, None)
+    await _enqueue(render_final, job_id)
+    await bot.send_message(chat_id, texts.with_footer(texts.rendering()))
+
+
 @router.callback_query(F.data.startswith("approve:"))
 async def on_approve(cb: CallbackQuery, bot: Bot):
-    from app.tasks import render_final
     job_id = int(cb.data.split(":", 1)[1])
+    key = (bot.token, cb.from_user.id)
     with ctx():
         job = db.session.get(Job, job_id)
         if not job or job.status != "awaiting_user":
             await cb.answer("Уже обработано")
             return
-        job.status = "queued"
-        db.session.commit()
-    await _enqueue(render_final, job_id)
-    _awaiting_correction.pop((bot.token, cb.from_user.id), None)
-    await cb.message.answer(texts.with_footer(texts.rendering()))
+        source = job.media_source or "mix"
+        # seed the render media from the job's project
+        proj = db.session.get(Project, job.project_id) if job.project_id else None
+        if proj:
+            billing.set_job_media(job, billing.project_media(proj))
+        media_count = len(billing.job_media(job))
+
+    # stock → render right away; user/mix → gather media first
+    if source == "stock":
+        await _start_render(bot, cb.message.chat.id, job_id, key)
+    else:
+        _awaiting_render_media[key] = job_id
+        await cb.message.answer(
+            texts.with_footer(texts.ask_media_before_render(source, media_count)),
+            reply_markup=after_approve_media_kb(job_id))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("render:"))
+async def on_render(cb: CallbackQuery, bot: Bot):
+    job_id = int(cb.data.split(":", 1)[1])
+    key = (bot.token, cb.from_user.id)
+    with ctx():
+        job = db.session.get(Job, job_id)
+        if not job or job.status not in ("awaiting_user",):
+            await cb.answer("Уже в работе")
+            return
+    await _start_render(bot, cb.message.chat.id, job_id, key)
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("pickproj:"))
+async def on_pickproj(cb: CallbackQuery, bot: Bot):
+    job_id = int(cb.data.split(":", 1)[1])
+    with ctx():
+        job = db.session.get(Job, job_id)
+        user = billing.get_or_create_user(cb.from_user.id)
+        # other projects of this user that actually have media
+        rows = []
+        for p in Project.query.filter_by(user_id=user.id).all():
+            if p.id == job.project_id:
+                continue
+            cnt = len(billing.project_media(p))
+            if cnt:
+                rows.append((p, cnt))
+    if not rows:
+        await cb.message.answer(texts.with_footer(texts.no_other_project_media()),
+                                reply_markup=after_approve_media_kb(job_id))
+    else:
+        await cb.message.answer(texts.with_footer(texts.pick_project_prompt()),
+                                reply_markup=pick_project_media_kb(job_id, rows))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("pickmedia:"))
+async def on_pickmedia(cb: CallbackQuery, bot: Bot):
+    _, job_id, proj_id = cb.data.split(":")
+    job_id, proj_id = int(job_id), int(proj_id)
+    with ctx():
+        job = db.session.get(Job, job_id)
+        proj = db.session.get(Project, proj_id)
+        merged = billing.job_media(job) + billing.project_media(proj)
+        # de-dup preserving order
+        seen, out = set(), []
+        for m in merged:
+            if m not in seen:
+                seen.add(m); out.append(m)
+        billing.set_job_media(job, out)
+        name, count = proj.name, len(out)
+    await cb.message.answer(texts.with_footer(texts.media_taken_from(name, count)),
+                            reply_markup=after_approve_media_kb(job_id))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("backmedia:"))
+async def on_backmedia(cb: CallbackQuery, bot: Bot):
+    job_id = int(cb.data.split(":", 1)[1])
+    with ctx():
+        job = db.session.get(Job, job_id)
+        count = len(billing.job_media(job))
+        source = job.media_source or "mix"
+    await cb.message.answer(texts.with_footer(texts.ask_media_before_render(source, count)),
+                            reply_markup=after_approve_media_kb(job_id))
     await cb.answer()
 
 
@@ -205,11 +297,22 @@ async def _add_media(bot: Bot, message: Message, file_id: str, suffix: str, size
         log.warning("media download failed (%s); offering web upload", e)
         await _too_big_link(message, size)
         return
+    key = (bot.token, message.from_user.id)
+    render_job_id = _awaiting_render_media.get(key)
     with ctx():
         user = billing.get_or_create_user(message.from_user.id)
         proj = billing.get_active_project(user)
-        count = billing.add_project_media(proj, path)
-    await message.answer(texts.with_footer(texts.media_added(count)))
+        billing.add_project_media(proj, path)
+        if render_job_id:                       # gathering media for an approved job
+            job = db.session.get(Job, render_job_id)
+            count = billing.add_job_media(job, path)
+        else:
+            count = len(billing.project_media(proj))
+    if render_job_id:
+        await message.answer(texts.with_footer(texts.render_media_added(count)),
+                             reply_markup=after_approve_media_kb(render_job_id))
+    else:
+        await message.answer(texts.with_footer(texts.media_added(count)))
 
 
 @router.message(F.photo)

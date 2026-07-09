@@ -35,6 +35,23 @@ def media_source_kb() -> InlineKeyboardMarkup:
     ])
 
 
+def after_approve_media_kb(job_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="📁 Взять из другого проекта", callback_data=f"pickproj:{job_id}")
+    b.button(text="▶️ Рендерить", callback_data=f"render:{job_id}")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def pick_project_media_kb(job_id: int, projects) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for p, cnt in projects:
+        b.button(text=f"{p.name} · {cnt} медиа", callback_data=f"pickmedia:{job_id}:{p.id}")
+    b.button(text="◀️ Назад", callback_data=f"backmedia:{job_id}")
+    b.adjust(1)
+    return b.as_markup()
+
+
 def projects_kb(projects, active_id) -> InlineKeyboardMarkup:
     rows = []
     for p in projects:

@@ -108,6 +108,23 @@ def project_media(project):
     return json.loads(project.media_json) if project.media_json else []
 
 
+def job_media(job):
+    return json.loads(job.media_json) if job.media_json else []
+
+
+def set_job_media(job, paths):
+    job.media_json = json.dumps(paths) if paths else None
+    db.session.commit()
+
+
+def add_job_media(job, path):
+    items = job_media(job)
+    items.append(path)
+    job.media_json = json.dumps(items)
+    db.session.commit()
+    return len(items)
+
+
 def make_upload_link(user, project):
     """Mint a one-off web upload token and return the full URL for big-media upload."""
     tok = UploadToken.generate(user, project, Config.UPLOAD_TOKEN_TTL_HOURS)

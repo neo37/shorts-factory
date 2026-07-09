@@ -98,6 +98,31 @@ def source_set(current: str) -> str:
     return f"✅ Источник медиа: <b>{label}</b>."
 
 
+def ask_media_before_render(source: str, media_count: int) -> str:
+    src = "свои медиа" if source == "user" else "микс (свои + стоки)"
+    return (
+        f"✅ Сценарий утверждён. Источник медиа: <b>{src}</b>.\n\n"
+        f"Пришлите <b>фото или видео</b> для фонов сцен (сейчас в подборке: <b>{media_count}</b>), "
+        "или возьмите медиа из другого проекта. Когда будете готовы — нажмите <b>▶️ Рендерить</b>."
+    )
+
+
+def render_media_added(count: int) -> str:
+    return f"📎 Добавлено (в подборке для рендера: <b>{count}</b>). Пришлите ещё или нажмите ▶️ Рендерить."
+
+
+def pick_project_prompt() -> str:
+    return "📁 Выберите проект, из которого взять медиа:"
+
+
+def no_other_project_media() -> str:
+    return "В других проектах нет медиа. Пришлите фото/видео сами или нажмите ▶️ Рендерить."
+
+
+def media_taken_from(name: str, count: int) -> str:
+    return f"✅ Взято из «<b>{name}</b>». В подборке для рендера: <b>{count}</b>. Нажмите ▶️ Рендерить."
+
+
 def voice_received() -> str:
     return "🎙 Голосовое получено — распознаю речь, затем соберу сценарий…"
 
