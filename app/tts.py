@@ -54,7 +54,7 @@ def _synth_piper(text, gender, out_path, fmt):
     voice = Config.PIPER_VOICE_FEMALE if gender != "male" else Config.PIPER_VOICE_MALE
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         wav = tmp.name
-    subprocess.run([Config.PIPER_BIN, "--model", voice, "--output_file", wav],
+    subprocess.run([Config.PIPER_BIN, "-m", voice, "-f", wav],
                    input=text.encode(), check=True)
     if fmt == "wav":
         Path(out_path).write_bytes(Path(wav).read_bytes())
