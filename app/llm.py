@@ -57,8 +57,16 @@ def _fallback_storyboard(prompt, corrections=""):
 
 
 def generate_storyboard(prompt, corrections="", model=None):
-    """Return (storyboard_dict, vo_draft_text). Never raises — falls back offline."""
+    """Return (storyboard_dict, vo_draft_text). Never raises — falls back offline.
+    If the prompt contains URLs, their page content is fetched and added as context."""
     user_msg = prompt if not corrections else f"{prompt}\n\nПравки пользователя: {corrections}"
+    try:
+        from . import webfetch
+        ctx = webfetch.fetch_context(f"{prompt}\n{corrections}")
+        if ctx:
+            user_msg = f"{user_msg}\n\n{ctx}"
+    except Exception as e:  # noqa: BLE001
+        log.warning("web context skipped: %s", e)
     try:
         client = _client()
         resp = client.chat.completions.create(
